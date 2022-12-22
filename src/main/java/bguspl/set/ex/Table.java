@@ -28,7 +28,8 @@ public class Table {
      * Mapping between a card and the slot it is in (null if none).
      */
     protected final Integer[] cardToSlot; // slot per card (if any)
-
+    protected volatile int[][] slotToTokens; //should be synchronized
+    protected volatile int[][] playerTokensToSlots; //should be synchronized
     /**
      * Constructor for testing.
      *
@@ -41,6 +42,20 @@ public class Table {
         this.env = env;
         this.slotToCard = slotToCard;
         this.cardToSlot = cardToSlot;
+        this.slotToTokens = new int[slotToCard.length][env.config.players];
+        this.playerTokensToSlots = new int[env.config.players][slotToCard.length];
+        for( int i=0; i<slotToCard.length; i++){
+            slotToCard[i]= -1 ;
+        }
+        for( int i=0; i<cardToSlot.length; i++){
+            cardToSlot[i]= -1;
+        }
+        for( int i=0; i<slotToCard.length; i++){
+            for( int j=0; j<env.config.players; j++) {
+                slotToTokens[i][j] = 0;
+                playerTokensToSlots[j][i] = 0;
+            }
+        }
     }
 
     /**
@@ -95,18 +110,29 @@ public class Table {
         slotToCard[slot] = card;
 
         // TODO implement
+        env.ui.placeCard(card,slot);
     }
 
     /**
      * Removes a card from a grid slot on the table.
      * @param slot - the slot from which to remove the card.
      */
-    public void removeCard(int slot) {
+    public synchronized void removeCard(int slot) {
         try {
             Thread.sleep(env.config.tableDelayMillis);
         } catch (InterruptedException ignored) {}
 
         // TODO implement
+        int cardToRemove = slotToCard[slot] ;
+        if(cardToRemove!=-1){
+            slotToCard[slot] = -1;
+            cardToSlot[cardToRemove] = -1;
+            int[] playerToRemove = slotToTokens[slot];
+            for (int i = 0; i < playerToRemove.length; i++){
+                removeToken(i, slot);
+                env.ui.removeCard(slot);
+            }
+        }
     }
 
     /**
@@ -114,8 +140,12 @@ public class Table {
      * @param player - the player the token belongs to.
      * @param slot   - the slot on which to place the token.
      */
-    public void placeToken(int player, int slot) {
+    public synchronized void placeToken(int player, int slot) {
+
         // TODO implement
+        playerTokensToSlots[player][slot]=1;
+        slotToTokens[slot][player]=1;
+        env.ui.placeToken(player, slot);
     }
 
     /**
@@ -124,8 +154,25 @@ public class Table {
      * @param slot   - the slot from which to remove the token.
      * @return       - true iff a token was successfully removed.
      */
-    public boolean removeToken(int player, int slot) {
+    public synchronized boolean removeToken(int player, int slot) {
         // TODO implement
+        if(playerTokensToSlots[player][slot]==1 && slotToTokens[slot][player]==1){
+            playerTokensToSlots[player][slot]=0;
+            slotToTokens[slot][player]=0;
+            env.ui.removeToken(player,slot);
+            return true;
+        }
         return false;
+    }
+
+    public int countTokens(int p)
+    {
+        int count = 0;
+        for (int i = 0; i < playerTokensToSlots[p].length; i++){
+            if (playerTokensToSlots[p][i] == 1)
+                count++;
+        }
+
+        return count;
     }
 }
